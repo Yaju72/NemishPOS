@@ -1,0 +1,155 @@
+﻿@page "/generate-report"
+
+@inject OrderService orderService;
+
+
+<div class="container mt-5">
+    <!-- Section 1: Daily Report -->
+    <div class="row">
+        <div class="col-md-6">
+            <h2>Daily Report Generator</h2>
+            <div class="form-group">
+                <label for="dailyDate">Select Date:</label>
+                <input type="date" class="form-control" id="dailyDate" @bind="day" @onclick="() => { dailyReportGenerated = false; }">
+            </div>
+            <button class="btn btn-primary mt-4" @onclick="() => OnGenerateDailyReportClicked()">Generate Daily Report</button>
+        </div>
+    </div>
+    @if (dailyReportGenerated)
+    {
+        <AlertMessage Type="success" Message="Report has been generated" />
+    }
+    <!-- Section 2: Monthly Report -->
+    <div class="row my-5">
+        <div class="col-md-6">
+            <h2>Monthly Report Generator</h2>
+            <div class="form-group">
+                <label for="monthlyMonth">Select Month:</label>
+                <input type="month" class="form-control" id="monthlyMonth" @bind="month" @onclick="() => { monthlyReportGenerated = false; }">
+            </div>
+            <button class="btn btn-primary mt-4" @onclick="() => OnGenerateMonthlyReportClicked()">Generate Monthly Report</button>
+        </div>
+    </div>
+    @if (monthlyReportGenerated)
+    {
+        <AlertMessage Type="success" Message="Report has been generated" />
+    }
+</div>
+
+@code {
+    private DateTime day { get; set; } = DateTime.Now;
+    private DateTime month { get; set; } = DateTime.Now;
+    private List<Orders> _orders { get; set; }
+
+    private bool dailyReportGenerated { get; set; } = false;
+    private bool monthlyReportGenerated { get; set; } = false;
+
+    public class CoffeeStatistics
+    {
+        public string CoffeeName { get; set; }
+        public int TotalQuantitySold { get; set; }
+    }
+
+    public class AddInStatistics
+    {
+        public string AddInName { get; set; }
+        public int TotalQuantitySold { get; set; }
+    }
+
+    protected override void OnInitialized()
+    {
+        _orders = orderService.GetAllOrders();
+    }
+
+
+    private void OnGenerateDailyReportClicked()
+    {
+        dailyReportGenerated = false;
+        List<Orders> dayOrders = _orders.Where(order => order.orderDate.Date == day.Date).ToList();
+
+        int totalSales = GetTotalSales(dayOrders);
+        List<CoffeeStatistics> topFiveCoffees = GetTopFiveCoffees(dayOrders);
+        List<AddInStatistics> topFiveAddIns = GetTopFiveAddIns(dayOrders);
+        var pdfService = new PdfGenerationService();
+        string filePath = Path.Combine(Utils.GetAppDirectoryPath(), $"{day.Day}_{day.Month}_{day.Year}_daily_report.pdf");
+        try
+        {
+            pdfService.GenerateDailyReport(filePath, day, totalSales, topFiveCoffees, topFiveAddIns);
+            dailyReportGenerated = true;
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
+    }
+
+    private void OnGenerateMonthlyReportClicked()
+    {
+        monthlyReportGenerated = false;
+        List<Orders> monthOrders = _orders.Where(order => order.orderDate.Month == month.Month).ToList();
+        int totalSales = GetTotalSales(monthOrders);
+        List<CoffeeStatistics> topFiveCoffees = GetTopFiveCoffees(monthOrders);
+        List<AddInStatistics> topFiveAddIns = GetTopFiveAddIns(monthOrders);
+        var pdfService = new PdfGenerationService();
+        string filePath = Path.Combine(Utils.GetAppDirectoryPath(), $"{day.Day}_{day.Month}_{day.Year}_monthly_report.pdf");
+        try
+        {
+            pdfService.GenerateDailyReport(filePath, month, totalSales, topFiveCoffees, topFiveAddIns);
+            monthlyReportGenerated = true;
+
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+        }
+    }
+
+    private int GetTotalSales(List<Orders> orders)
+    {
+        int total = 0;
+        foreach (var order in orders)
+        {
+            total = total + order.grandTotal;
+        }
+
+        return total;
+    }
+
+
+    private List<CoffeeStatistics> GetTopFiveCoffees(List<Orders> orders)
+    {
+        var flattenedCoffeeList = orders.SelectMany(order => order.coffeeList);
+
+        var coffeeStatistics = flattenedCoffeeList
+    .GroupBy(coffee => coffee.CoffeeName)
+    .Select(group => new CoffeeStatistics
+        {
+            CoffeeName = group.Key,
+            TotalQuantitySold = group.Count()
+        })
+    .OrderByDescending(stat => stat.TotalQuantitySold)
+    .Take(5)
+    .ToList();
+        return coffeeStatistics;
+    }
+
+
+    private List<AddInStatistics> GetTopFiveAddIns(List<Orders> orders)
+    {
+        var flattenedAddInList = orders.SelectMany(order => order.addInsList);
+
+        var addInStatistics = flattenedAddInList
+    .GroupBy(addIn => addIn.AddInName)
+    .Select(group => new AddInStatistics
+        {
+            AddInName = group.Key,
+            TotalQuantitySold = group.Count()
+        })
+    .OrderByDescending(stat => stat.TotalQuantitySold)
+    .Take(5)
+    .ToList();
+
+        return addInStatistics;
+    }
+}
